@@ -15,9 +15,9 @@ function CreditScore() {
     functionName: "getScoreTimestamp",
     args: [address],
     query: { enabled: !!address },
-  });
+  }) as { data: bigint | undefined; isLoading: boolean; refetch: () => void };
 
-  async function handleComputeScore() {
+  function handleComputeScore() {
     if (!address) return;
     writeContract(
       {
@@ -41,9 +41,18 @@ function CreditScore() {
       <div className="card">
         {!isConnected && <p className="warning">Please connect your wallet first.</p>}
 
-        {isLoading && <p style={{ color: "#64748b", fontSize: "14px" }}>Loading...</p>}
+        {isLoading && (
+          <div>
+            <div className="skeleton skeleton-title" />
+            <div className="skeleton skeleton-text" style={{ width: "80%" }} />
+            <div className="skeleton skeleton-text" style={{ width: "60%" }} />
+            <div style={{ marginTop: "16px" }}>
+              <div className="skeleton skeleton-button" />
+            </div>
+          </div>
+        )}
 
-        {hasScore ? (
+        {!isLoading && hasScore && (
           <div style={{ marginBottom: "24px" }}>
             <div style={{ color: "#64748b", fontSize: "13px", marginBottom: "8px" }}>
               Last computed: {new Date(Number(score) * 1000).toLocaleString()}
@@ -62,23 +71,24 @@ function CreditScore() {
               Score is encrypted on-chain. Connect via Zama relayer to decrypt.
             </div>
           </div>
-        ) : (
-          !isLoading &&
-          isConnected && (
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px" }}>
-              No score computed yet. Click below to compute your credit score.
-            </p>
-          )
         )}
 
-        <div style={{ display: "flex", gap: "12px" }}>
-          <button onClick={handleComputeScore} disabled={!isConnected || isComputing}>
-            {isComputing ? "Computing..." : "Compute Score"}
-          </button>
-          <button className="secondary" onClick={() => refetch()} disabled={!isConnected || isLoading}>
-            Refresh
-          </button>
-        </div>
+        {!isLoading && !hasScore && isConnected && (
+          <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px" }}>
+            No score computed yet. Click below to compute your credit score.
+          </p>
+        )}
+
+        {!isLoading && (
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button onClick={handleComputeScore} disabled={!isConnected || isComputing}>
+              {isComputing ? "Computing..." : "Compute Score"}
+            </button>
+            <button className="secondary" onClick={() => refetch()} disabled={!isConnected || isLoading}>
+              Refresh
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

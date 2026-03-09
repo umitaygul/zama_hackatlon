@@ -101,21 +101,39 @@ function AdminPanel() {
           ⚠️ Only the contract owner can update these parameters. Tightening the eligibility threshold makes loans
           harder to obtain — loosening makes them easier.
         </div>
-        {fields.map((field) => (
-          <div key={field.key}>
-            <label className="label">{field.label}</label>
-            <input
-              type="number"
-              value={params[field.key as keyof typeof params]}
-              onChange={(e) => handleChange(field.key, e.target.value)}
-            />
+
+        {!loaded && (
+          <div>
+            {[...Array(7)].map((_, i) => (
+              <div key={i}>
+                <div className="skeleton skeleton-text" style={{ width: "40%", marginBottom: "6px" }} />
+                <div className="skeleton skeleton-input" />
+              </div>
+            ))}
           </div>
-        ))}
-        <button onClick={handleUpdate} disabled={!isConnected || isPending}>
-          {isPending ? "Updating..." : "Update Parameters"}
-        </button>
-        {isSuccess && <p className="success">✓ Parameters updated successfully!</p>}
-        {isError && <p className="error">✗ Failed. Make sure you are the contract owner.</p>}
+        )}
+
+        {loaded &&
+          fields.map((field) => (
+            <div key={field.key}>
+              <label className="label">{field.label}</label>
+              <input
+                type="number"
+                value={params[field.key as keyof typeof params]}
+                onChange={(e) => handleChange(field.key, e.target.value)}
+              />
+            </div>
+          ))}
+
+        {loaded && (
+          <>
+            <button onClick={handleUpdate} disabled={!isConnected || isPending}>
+              {isPending ? "Updating..." : "Update Parameters"}
+            </button>
+            {isSuccess && <p className="success">✓ Parameters updated successfully!</p>}
+            {isError && <p className="error">✗ Failed. Make sure you are the contract owner.</p>}
+          </>
+        )}
       </div>
     </div>
   );

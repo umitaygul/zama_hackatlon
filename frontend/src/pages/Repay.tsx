@@ -3,7 +3,7 @@ import { useWriteContract, useAccount, useReadContract, useWaitForTransactionRec
 import { CONTRACT_ADDRESSES, CONTRACT_ABIS } from "../config/contracts";
 import { encryptAmount } from "../config/fhevm";
 
-function ApplyLoan() {
+function Repay() {
   const [amount, setAmount] = useState("");
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -31,7 +31,7 @@ function ApplyLoan() {
   const status = statusLabel[Number(loanStatus ?? 0)] ?? statusLabel[0];
   const hasActiveLoan = Number(loanStatus) === 1;
 
-  async function handleApply() {
+  async function handleRepay() {
     if (!amount || !address) return;
     setErrorMsg("");
     setIsEncrypting(true);
@@ -45,20 +45,12 @@ function ApplyLoan() {
         {
           address: CONTRACT_ADDRESSES.ConfidentialLending,
           abi: CONTRACT_ABIS.ConfidentialLending,
-          functionName: "applyForLoan",
+          functionName: "repay",
           args: [encrypted.handles[0], encrypted.inputProof],
         },
         {
-          onError: (error) => {
-            if (error.message.includes("no score computed")) {
-              setErrorMsg("Please compute your credit score first.");
-            } else if (error.message.includes("existing active loan")) {
-              setErrorMsg("You already have an active loan.");
-            } else if (error.message.includes("no bank account")) {
-              setErrorMsg("Please open a bank account first.");
-            } else {
-              setErrorMsg("Application failed. Please try again.");
-            }
+          onError: () => {
+            setErrorMsg("Repayment failed. Make sure you have an active loan.");
           },
         },
       );
@@ -71,8 +63,8 @@ function ApplyLoan() {
 
   return (
     <div className="page">
-      <h1>Apply for Loan</h1>
-      <p className="subtitle">Loan eligibility is determined privately using your encrypted credit score</p>
+      <h1>Repay Loan</h1>
+      <p className="subtitle">Make encrypted repayments toward your active loan</p>
       <div className="card">
         {!isConnected && <p className="warning">Please connect your wallet first.</p>}
 
@@ -89,7 +81,7 @@ function ApplyLoan() {
               border: "1px solid #1e2d4a",
             }}
           >
-            <span style={{ color: "#64748b", fontSize: "13px" }}>Current Loan Status:</span>
+            <span style={{ color: "#64748b", fontSize: "13px" }}>Loan Status:</span>
             <span
               style={{
                 color: status.color,
@@ -103,50 +95,28 @@ function ApplyLoan() {
           </div>
         )}
 
-        <div
-          style={{
-            background: "#1a2236",
-            border: "1px solid #1e2d4a",
-            borderRadius: "8px",
-            padding: "16px",
-            marginBottom: "24px",
-            fontSize: "14px",
-            color: "#64748b",
-            lineHeight: "1.6",
-          }}
-        >
-          💡 Your credit score is evaluated on-chain using FHE. Neither the lender nor anyone else can see your actual
-          score — only whether you qualify.
-        </div>
-
-        {hasActiveLoan && (
+        {!hasActiveLoan && isConnected && (
           <p className="warning" style={{ marginBottom: "16px" }}>
-            You already have an active loan. Please repay it before applying again.
+            No active loan found. Apply for a loan first.
           </p>
         )}
 
-        <label className="label">Loan Amount</label>
+        <label className="label">Repayment Amount</label>
         <input
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="0.00"
-          disabled={hasActiveLoan}
+          disabled={!hasActiveLoan}
         />
-        <button onClick={handleApply} disabled={!isConnected || busy || !amount || hasActiveLoan}>
-          {isEncrypting
-            ? "Encrypting..."
-            : isPending
-              ? "Waiting..."
-              : isConfirming
-                ? "Confirming..."
-                : "Apply for Loan"}
+        <button onClick={handleRepay} disabled={!isConnected || busy || !amount || !hasActiveLoan}>
+          {isEncrypting ? "Encrypting..." : isPending ? "Waiting..." : isConfirming ? "Confirming..." : "Repay"}
         </button>
-        {isSuccess && <p className="success">✓ Loan application submitted!</p>}
-        {isError && <p className="error">✗ {errorMsg || "Application failed. Please try again."}</p>}
+        {isSuccess && <p className="success">✓ Repayment submitted successfully!</p>}
+        {isError && <p className="error">✗ {errorMsg || "Repayment failed. Please try again."}</p>}
       </div>
     </div>
   );
 }
 
-export default ApplyLoan;
+export default Repay;
