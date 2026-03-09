@@ -25,6 +25,7 @@ With Zama's fhEVM, computation runs directly on encrypted data. This project imp
 - **Transfer amounts** are encrypted end-to-end — observers only see that a transfer occurred
 - **Credit scoring** runs entirely under FHE — the lender receives only an encrypted boolean (`ebool`) indicating eligibility, never the underlying financial data
 - **Loan amounts** are encrypted — the bank's portfolio is an aggregate of ciphertexts
+- **Scoring parameters** are adjustable by the contract owner — the bank can tighten or loosen credit policy based on economic conditions, without exposing any customer data
 
 ---
 
@@ -46,6 +47,11 @@ Customer
                                              │
                                     applyForLoan(encryptedAmount)
                                     FHE.select(eligible, amount, 0)
+
+Bank Admin (Owner)
+   │
+   └─ setScoringParameters()  ──────────────► ConfidentialCreditScorer.sol
+                                             (adjusts thresholds & eligibility cutoff)
 ```
 
 ### Privacy Guarantees
@@ -79,7 +85,7 @@ Core banking contract. All sensitive values stored as `euint64` ciphertexts.
 
 Scores customers using three independent FHE sub-computations (100 points total):
 
-| Criterion | Max Points | Thresholds |
+| Criterion | Max Points | Default Thresholds |
 |-----------|-----------|------------|
 | Current balance | 40 pts | High: $10k / Med: $5k |
 | Account tenure | 30 pts | High: 24mo / Med: 12mo |
@@ -87,6 +93,8 @@ Scores customers using three independent FHE sub-computations (100 points total)
 
 Score ≥ 50 → `isEligible = true` (encrypted `ebool`).
 The `LendingContract` only ever receives this `ebool` — never the score integer or any balance figure.
+
+**Dynamic Scoring Policy:** The contract owner can call `setScoringParameters()` to adjust all thresholds and the eligibility cutoff at any time. This mirrors real-world monetary policy — when credit conditions tighten, the bank raises the eligibility threshold; when they loosen, it lowers it. No customer data is ever exposed in this process.
 
 ### `ConfidentialLending.sol`
 
@@ -101,6 +109,33 @@ Handles loan issuance and repayment with fully encrypted amounts.
 
 ---
 
+## 🖥️ Frontend
+
+A React + Vite frontend connects to the deployed Sepolia contracts and encrypts all inputs client-side using `@zama-fhe/relayer-sdk` before sending transactions.
+
+### Pages
+
+| Page | Description |
+|------|-------------|
+| Open Account | Create a new confidential bank account |
+| Deposit / Withdraw | Encrypt and submit amounts via FHE relayer |
+| Transfer | Send funds privately to another address |
+| Credit Score | View your encrypted score with a visual progress bar |
+| Apply for Loan | Submit an encrypted loan application |
+| Scoring Policy | Admin panel to adjust scoring parameters (owner only) |
+
+### Run Locally
+
+```bash
+cd confidential-bank-frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` and connect your wallet (Rabby or MetaMask) on Sepolia.
+
+---
+
 ## 🔧 Setup & Installation
 
 ### Prerequisites
@@ -108,11 +143,11 @@ Handles loan issuance and repayment with fully encrypted amounts.
 - Node.js v18+
 - Git
 
-### 1. Clone Zama's Hardhat Template
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/zama-ai/fhevm-hardhat-template
-cd fhevm-hardhat-template
+git clone https://github.com/umitaygul/zama_hackatlon
+cd zama_hackatlon
 ```
 
 ### 2. Install Dependencies
@@ -125,142 +160,87 @@ npm install @openzeppelin/confidential-contracts --legacy-peer-deps
 
 ### 3. Enable `viaIR` in `hardhat.config.ts`
 
-Inside the `solidity.settings` block, add:
-
 ```typescript
 solidity: {
   version: "0.8.27",
   settings: {
     optimizer: { enabled: true, runs: 800 },
     evmVersion: "cancun",
-    viaIR: true,   // ← add this
+    viaIR: true,
   },
 },
 ```
 
-### 4. Copy Project Files
-
-```
-contracts/
-├── ConfidentialBank.sol
-├── ConfidentialCreditScorer.sol
-├── ConfidentialLending.sol
-└── interfaces/
-    ├── IConfidentialBank.sol
-    └── IConfidentialCreditScorer.sol
-
-scripts/
-└── deploy.ts
-
-test/
-└── ConfidentialBankSystem.test.ts
-```
-
-### 5. Compile
+### 4. Compile & Test
 
 ```bash
 npx hardhat compile
+npx hardhat test
 ```
 
-### 6. Run Tests
+Expected: **35 passing**
+
+### 5. Deploy to Sepolia
 
 ```bash
-# Start local fhEVM node (Terminal 1)
-npx hardhat node
-
-# Run tests (Terminal 2)
-npx hardhat test test/ConfidentialBankSystem.test.ts
+npx hardhat vars set MNEMONIC
+npx hardhat vars set ALCHEMY_API_KEY
+npx hardhat run scripts/deploy.ts --network sepolia
 ```
 
-Expected output:
-```
-  Confidential Bank & Credit Scoring
-    ConfidentialBank
-      ✔ should open an account
-      ✔ should revert on duplicate account
-      ✔ should initialise balance to zero
-      ✔ should increase balance after deposit
-      ✔ should accumulate multiple deposits
-      ✔ should revert if caller has no account
-      ✔ should decrease balance
-      ✔ should withdraw 0 when amount exceeds balance (oblivious conditional)
-      ✔ should move funds between accounts
-      ✔ should not change balances when amount exceeds balance
-      ✔ should revert on self-transfer
-      ✔ should revert if recipient has no account
-    ConfidentialCreditScorer
-      ✔ should return 0 timestamp before score is computed
-      ✔ should record timestamp after computeScore
-      ✔ should give minimum score with no deposits or tenure
-      ✔ should give maximum score with strong financials
-      ✔ should reject unauthorized queries
-    ConfidentialLending
-      ✔ should create active loan for eligible customer
-      ✔ should approve 0 for ineligible customer
-      ✔ should revert if customer has no bank account
-      ✔ should revert if no score computed
-      ✔ should revert on duplicate active loan
-      ✔ should accumulate repayments
-      ✔ should allow owner to mark loan as repaid
-      ✔ should reject unauthorized loan queries
-      ✔ should only allow owner to read total loan volume
+---
 
-  26 passing
-```
+## 🌐 Deployed Contracts (Sepolia)
 
-### 7. Deploy
-
-```bash
-npx hardhat run scripts/deploy.ts --network localhost
-```
+| Contract | Address |
+|----------|---------|
+| ConfidentialBank | `0x3C4382e87E92dC3814D662B1A938958288Fe85C1` |
+| ConfidentialCreditScorer | `0xb51C5da0Fc124D32dF8b17068AC4b544A7Ea403c` |
+| ConfidentialLending | `0x8b1dD90432B891c9bfF7207d8c1AEc3DE493BAE1` |
 
 ---
 
 ## 🔬 Technical Deep-Dive
 
-### Why TFHE?
-
-TFHE (Fast Fully Homomorphic Encryption) evaluates boolean gates in ~10ms. Arithmetic on `euint64` operands (`add`, `ge`, `select`) runs in ~100–300ms per operation — practical latency for on-chain finance. The underlying scheme is also quantum-resistant.
-
 ### The Oblivious Conditional Pattern
 
-Standard Solidity `if/else` cannot be used with encrypted values because evaluating the condition requires decryption. fhEVM solves this with `FHE.select(cond, a, b)`, which computes both branches homomorphically and returns the correct result without revealing which branch was taken.
+Standard Solidity `if/else` cannot be used with encrypted values because evaluating the condition requires decryption. fhEVM solves this with `FHE.select(cond, a, b)`:
 
-**Withdraw example:**
 ```solidity
-// ❌ Cannot do this — requires decrypting balance to evaluate
+// ❌ Cannot do this — requires decrypting balance
 require(balance >= amount, "insufficient funds");
 
-// ✅ Oblivious conditional — balance stays encrypted throughout
+// ✅ Oblivious conditional — balance stays encrypted
 ebool   hasFunds   = FHE.ge(balance, amount);
 euint64 safeAmount = FHE.select(hasFunds, amount, FHE.asEuint64(0));
 balance = FHE.sub(balance, safeAmount);
 ```
 
-If the balance is insufficient, `safeAmount` is encrypted zero. The transaction succeeds silently — no revert, no information leak.
+### Dynamic Scoring Policy
+
+`setScoringParameters()` allows the contract owner to adjust all scoring thresholds and the eligibility cutoff on-chain — analogous to a central bank adjusting interest rates. Customer financial data remains fully encrypted throughout.
 
 ### Access Control via `FHE.allow`
 
-`FHE.allow(handle, address)` records on-chain which addresses are permitted to operate on or decrypt a given ciphertext handle. This creates a fine-grained permission layer:
-
 - `CreditScorer` can **compute** on Bank ciphertext handles but cannot **decrypt** them
-- `LendingContract` can receive only the `ebool` eligibility flag — never the score
+- `LendingContract` receives only the `ebool` eligibility flag — never the score
 - Each customer can decrypt only their own data
-
-### Compliance Alignment
-
-Personal financial data is never written to the chain in plaintext, satisfying the GDPR *data minimization* principle. Regulatory auditors can be granted selective decrypt access via `FHE.allow` without exposing data to the general public — a model compatible with emerging confidential finance regulations.
 
 ---
 
 ## 🗺️ Roadmap
 
+- [x] Core FHE banking contracts (deposit, withdraw, transfer)
+- [x] Confidential credit scoring with three FHE sub-computations
+- [x] Oblivious loan approval via `FHE.select`
+- [x] Dynamic scoring policy via `setScoringParameters`
+- [x] 35 passing tests covering all contracts
+- [x] Sepolia testnet deployment
+- [x] React frontend with wallet integration
 - [ ] Chainlink Automation for monthly `incrementMonthsActive`
 - [ ] Gateway async-decrypt callback for trustless repayment settlement
-- [ ] React frontend with fhEVM SDK for client-side encrypt/decrypt
 - [ ] Encrypted fixed-point interest rate calculation
 - [ ] Multi-collateral loan support
-- [ ] Sepolia testnet deployment
 
 ---
 
@@ -272,13 +252,17 @@ Personal financial data is never written to the chain in plaintext, satisfying t
 │   ├── ConfidentialCreditScorer.sol
 │   ├── ConfidentialLending.sol
 │   └── interfaces/
-│       ├── IConfidentialBank.sol
-│       └── IConfidentialCreditScorer.sol
 ├── scripts/
 │   └── deploy.ts
 ├── test/
 │   └── ConfidentialBankSystem.test.ts
-├── deployed-addresses.json      ← generated after deploy
+├── deployed-addresses.json
+├── confidential-bank-frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   ├── config/
+│   │   └── components/
+│   └── package.json
 └── README.md
 ```
 
