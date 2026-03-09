@@ -285,4 +285,83 @@ describe("Confidential Bank & Credit Scoring", function () {
       await expect(lending.connect(alice).getTotalLoanVolume()).to.be.reverted;
     });
   });
+  describe("Scoring Parameters", function () {
+  it("should have correct default parameters", async function () {
+    expect(await scorer.balanceThresholdHigh()).to.equal(10_000_000_000n);
+    expect(await scorer.balanceThresholdMed()).to.equal(5_000_000_000n);
+    expect(await scorer.eligibilityThreshold()).to.equal(50n);
+  });
+
+  it("should allow owner to update scoring parameters", async function () {
+    await (await scorer.connect(owner).setScoringParameters(
+      20_000_000_000n, // balanceHigh
+      8_000_000_000n,  // balanceMed
+      60_000_000_000n, // depositHigh
+      25_000_000_000n, // depositMed
+      36,              // monthsHigh
+      18,              // monthsMed
+      70               // eligibility (sıkılaştırma)
+    )).wait();
+
+    expect(await scorer.balanceThresholdHigh()).to.equal(20_000_000_000n);
+    expect(await scorer.eligibilityThreshold()).to.equal(70n);
+  });
+
+  it("should reject non-owner parameter update", async function () {
+    await expect(scorer.connect(alice).setScoringParameters(
+      20_000_000_000n,
+      8_000_000_000n,
+      60_000_000_000n,
+      25_000_000_000n,
+      36, 18, 70
+    )).to.be.reverted;
+  });
+
+  it("should revert when balanceMed >= balanceHigh", async function () {
+    await expect(scorer.connect(owner).setScoringParameters(
+      5_000_000_000n,  // high
+      5_000_000_000n,  // med == high → geçersiz
+      60_000_000_000n,
+      25_000_000_000n,
+      36, 18, 70
+    )).to.be.revertedWith("Scorer: invalid balance thresholds");
+  });
+
+  it("should revert when eligibility > 100", async function () {
+    await expect(scorer.connect(owner).setScoringParameters(
+      20_000_000_000n,
+      8_000_000_000n,
+      60_000_000_000n,
+      25_000_000_000n,
+      36, 18, 101
+    )).to.be.revertedWith("Scorer: eligibility max 100");
+  });
+
+  it("higher eligibility threshold should make previously eligible user ineligible", async function () {
+    // Alice güçlü finansallarla eligible oluyor
+    await (await bank.connect(alice).openAccount()).wait();
+    const enc = await encryptAmount(55_000_000_000, bankAddress, alice);
+    await (await bank.connect(alice).deposit(enc.handles[0], enc.inputProof)).wait();
+    for (let i = 0; i < 25; i++) {
+      await (await bank.connect(owner).incrementMonthsActive(alice.address)).wait();
+    }
+    await (await scorer.computeScore(alice.address)).wait();
+    const { eligible: before } = await scorer.connect(alice).getMyScore(alice.address);
+    expect(await decryptBool(before, scorerAddress, alice)).to.equal(true);
+
+    // Eşiği 95'e çıkar — artık kimse geçemez
+    await (await scorer.connect(owner).setScoringParameters(
+      20_000_000_000n,
+      8_000_000_000n,
+      60_000_000_000n,
+      25_000_000_000n,
+      36, 18, 95
+    )).wait();
+
+    // Skoru yeniden hesapla
+    await (await scorer.computeScore(alice.address)).wait();
+    const { eligible: after } = await scorer.connect(alice).getMyScore(alice.address);
+    expect(await decryptBool(after, scorerAddress, alice)).to.equal(false);
+  });
+});
 });

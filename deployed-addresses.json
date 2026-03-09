@@ -1,0 +1,11 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployer": "0x08c95aE409bDe827B530DD2c72d2d3387B301C13",
+  "contracts": {
+    "ConfidentialBank": "0x3C4382e87E92dC3814D662B1A938958288Fe85C1",
+    "ConfidentialCreditScorer": "0xb51C5da0Fc124D32dF8b17068AC4b544A7Ea403c",
+    "ConfidentialLending": "0x8b1dD90432B891c9bfF7207d8c1AEc3DE493BAE1"
+  },
+  "deployedAt": "2026-03-09T07:20:25.083Z"
+}
