@@ -29,7 +29,7 @@ function Transfer() {
           address: CONTRACT_ADDRESSES.ConfidentialBank,
           abi: CONTRACT_ABIS.ConfidentialBank,
           functionName: "transfer",
-          args: [to, encrypted.handles[0], encrypted.inputProof],
+          args: [to, encrypted.handle, encrypted.inputProof],
         },
         {
           onError: (error) => {

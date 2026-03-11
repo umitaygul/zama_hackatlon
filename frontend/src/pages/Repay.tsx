@@ -46,7 +46,7 @@ function Repay() {
           address: CONTRACT_ADDRESSES.ConfidentialLending,
           abi: CONTRACT_ABIS.ConfidentialLending,
           functionName: "repay",
-          args: [encrypted.handles[0], encrypted.inputProof],
+          args: [encrypted.handle, encrypted.inputProof],
         },
         {
           onError: () => {

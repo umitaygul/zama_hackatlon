@@ -28,10 +28,13 @@ function Deposit() {
           address: CONTRACT_ADDRESSES.ConfidentialBank,
           abi: CONTRACT_ABIS.ConfidentialBank,
           functionName: "deposit",
-          args: [encrypted.handles[0], encrypted.inputProof],
+          args: [encrypted.handle, encrypted.inputProof],
         },
         {
-          onError: () => setErrorMsg("Deposit failed. Make sure you have an account."),
+          onError: (err) => {
+            console.log('writeContract error', err)
+            setErrorMsg("Deposit failed. Make sure you have an account.")
+          },
         },
       );
     } finally {
@@ -54,10 +57,13 @@ function Deposit() {
           address: CONTRACT_ADDRESSES.ConfidentialBank,
           abi: CONTRACT_ABIS.ConfidentialBank,
           functionName: "withdraw",
-          args: [encrypted.handles[0], encrypted.inputProof],
+          args: [encrypted.handle, encrypted.inputProof],
         },
         {
-          onError: () => setErrorMsg("Withdrawal failed. Make sure you have sufficient balance."),
+          onError: (err) => {
+            console.log('writeContract error', err)
+            setErrorMsg("Withdrawal failed. Make sure you have sufficient balance.")
+          },
         },
       );
     } finally {

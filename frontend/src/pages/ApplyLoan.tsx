@@ -46,7 +46,7 @@ function ApplyLoan() {
           address: CONTRACT_ADDRESSES.ConfidentialLending,
           abi: CONTRACT_ABIS.ConfidentialLending,
           functionName: "applyForLoan",
-          args: [encrypted.handles[0], encrypted.inputProof],
+          args: [encrypted.handle, encrypted.inputProof],
         },
         {
           onError: (error) => {
