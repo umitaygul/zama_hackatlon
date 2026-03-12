@@ -95,6 +95,10 @@ contract ConfidentialBank is ZamaEthereumConfig, Ownable2Step {
 
         FHE.allowThis(_balances[msg.sender]);
         FHE.allow(_balances[msg.sender], msg.sender);
+        if (creditScorer != address(0)) {
+            FHE.allow(_balances[msg.sender], creditScorer);
+        }
+
         FHE.allowThis(_totalDeposited[msg.sender]);
         if (creditScorer != address(0)) {
             FHE.allow(_totalDeposited[msg.sender], creditScorer);
@@ -117,6 +121,10 @@ contract ConfidentialBank is ZamaEthereumConfig, Ownable2Step {
 
         FHE.allowThis(_balances[msg.sender]);
         FHE.allow(_balances[msg.sender], msg.sender);
+        // Scorer withdraw sonrası güncel balance'ı okuyabilmeli
+        if (creditScorer != address(0)) {
+            FHE.allow(_balances[msg.sender], creditScorer);
+        }
 
         emit Withdraw(msg.sender);
     }
@@ -140,8 +148,16 @@ contract ConfidentialBank is ZamaEthereumConfig, Ownable2Step {
 
         FHE.allowThis(_balances[msg.sender]);
         FHE.allow(_balances[msg.sender], msg.sender);
+        // Scorer gönderen tarafın güncel balance'ını okuyabilmeli
+        if (creditScorer != address(0)) {
+            FHE.allow(_balances[msg.sender], creditScorer);
+        }
+
         FHE.allowThis(_balances[to]);
         FHE.allow(_balances[to], to);
+        if (creditScorer != address(0)) {
+            FHE.allow(_balances[to], creditScorer);
+        }
 
         emit Transfer(msg.sender, to);
     }
