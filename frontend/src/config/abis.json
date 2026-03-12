@@ -99,6 +99,19 @@
         {
           "indexed": true,
           "internalType": "address",
+          "name": "lending",
+          "type": "address"
+        }
+      ],
+      "name": "LendingContractSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
           "name": "previousOwner",
           "type": "address"
         },
@@ -184,6 +197,24 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "customer",
+          "type": "address"
+        },
+        {
+          "internalType": "euint64",
+          "name": "amount",
+          "type": "bytes32"
+        }
+      ],
+      "name": "creditDeposit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "creditScorer",
       "outputs": [
@@ -194,6 +225,24 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "customer",
+          "type": "address"
+        },
+        {
+          "internalType": "euint64",
+          "name": "amount",
+          "type": "bytes32"
+        }
+      ],
+      "name": "debitBalance",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -290,6 +339,19 @@
     },
     {
       "inputs": [],
+      "name": "lendingContract",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "openAccount",
       "outputs": [],
       "stateMutability": "nonpayable",
@@ -337,6 +399,19 @@
         }
       ],
       "name": "setCreditScorer",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "lending_",
+          "type": "address"
+        }
+      ],
+      "name": "setLendingContract",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -512,50 +587,7 @@
     },
     {
       "anonymous": false,
-      "inputs": [
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "balanceHigh",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "balanceMed",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "depositHigh",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "depositMed",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "monthsHigh",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "monthsMed",
-          "type": "uint64"
-        },
-        {
-          "indexed": false,
-          "internalType": "uint64",
-          "name": "eligibility",
-          "type": "uint64"
-        }
-      ],
+      "inputs": [],
       "name": "ScoringParametersUpdated",
       "type": "event"
     },
@@ -690,6 +722,19 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "getMaxLoanAmount",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
@@ -710,12 +755,17 @@
           "type": "bytes32"
         },
         {
+          "internalType": "euint64",
+          "name": "balance",
+          "type": "bytes32"
+        },
+        {
           "internalType": "uint256",
           "name": "computedAt",
           "type": "uint256"
         }
       ],
-      "stateMutability": "view",
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -745,6 +795,19 @@
           "internalType": "address",
           "name": "",
           "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "maxLoanAmount",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
         }
       ],
       "stateMutability": "view",
@@ -826,22 +889,22 @@
       "inputs": [
         {
           "internalType": "uint64",
-          "name": "balanceHigh",
+          "name": "balHigh",
           "type": "uint64"
         },
         {
           "internalType": "uint64",
-          "name": "balanceMed",
+          "name": "balMed",
           "type": "uint64"
         },
         {
           "internalType": "uint64",
-          "name": "depositHigh",
+          "name": "depHigh",
           "type": "uint64"
         },
         {
           "internalType": "uint64",
-          "name": "depositMed",
+          "name": "depMed",
           "type": "uint64"
         },
         {
@@ -857,6 +920,11 @@
         {
           "internalType": "uint64",
           "name": "eligibility",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "maxLoan",
           "type": "uint64"
         }
       ],
@@ -1036,19 +1104,6 @@
     },
     {
       "inputs": [],
-      "name": "MAX_LOAN_AMOUNT",
-      "outputs": [
-        {
-          "internalType": "uint64",
-          "name": "",
-          "type": "uint64"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
       "name": "MIN_LOAN_AMOUNT",
       "outputs": [
         {
@@ -1146,11 +1201,6 @@
           "type": "bytes32"
         },
         {
-          "internalType": "euint64",
-          "name": "repaidAmount",
-          "type": "bytes32"
-        },
-        {
           "internalType": "enum ConfidentialLending.LoanStatus",
           "name": "status",
           "type": "uint8"
@@ -1161,7 +1211,7 @@
           "type": "uint256"
         }
       ],
-      "stateMutability": "view",
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -1186,19 +1236,6 @@
         }
       ],
       "name": "markAsDefaulted",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "borrower",
-          "type": "address"
-        }
-      ],
-      "name": "markAsRepaid",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1237,18 +1274,7 @@
       "type": "function"
     },
     {
-      "inputs": [
-        {
-          "internalType": "bytes32",
-          "name": "encryptedAmount",
-          "type": "bytes32"
-        },
-        {
-          "internalType": "bytes",
-          "name": "inputProof",
-          "type": "bytes"
-        }
-      ],
+      "inputs": [],
       "name": "repay",
       "outputs": [],
       "stateMutability": "nonpayable",

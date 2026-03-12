@@ -10,9 +10,9 @@ function Navbar() {
 
   const links = [
     { to: "/", label: "Open Account" },
-    { to: "/deposit", label: "Deposit" },
+    { to: "/credit-score", label: "My Account" },
+    { to: "/deposit", label: "Deposit / Withdraw" },
     { to: "/transfer", label: "Transfer" },
-    { to: "/credit-score", label: "Credit Score" },
     { to: "/apply-loan", label: "Apply Loan" },
     { to: "/repay", label: "Repay Loan" },
     { to: "/admin-panel", label: "Scoring Policy" },

@@ -10,13 +10,27 @@ function ApplyLoan() {
   const { address, isConnected } = useAccount();
 
   const { writeContract, isPending, data: hash } = useWriteContract();
-
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransactionReceipt({ hash });
 
   const { data: loanStatus } = useReadContract({
     address: CONTRACT_ADDRESSES.ConfidentialLending,
     abi: CONTRACT_ABIS.ConfidentialLending,
     functionName: "getLoanStatus",
+    args: [address],
+    query: { enabled: !!address },
+  });
+
+  const { data: maxLoanRaw } = useReadContract({
+    address: CONTRACT_ADDRESSES.ConfidentialCreditScorer,
+    abi: CONTRACT_ABIS.ConfidentialCreditScorer,
+    functionName: "getMaxLoanAmount",
+    query: { enabled: true },
+  });
+
+  const { data: scoreTimestamp } = useReadContract({
+    address: CONTRACT_ADDRESSES.ConfidentialCreditScorer,
+    abi: CONTRACT_ABIS.ConfidentialCreditScorer,
+    functionName: "getScoreTimestamp",
     args: [address],
     query: { enabled: !!address },
   });
@@ -30,6 +44,8 @@ function ApplyLoan() {
 
   const status = statusLabel[Number(loanStatus ?? 0)] ?? statusLabel[0];
   const hasActiveLoan = Number(loanStatus) === 1;
+  const hasScore = scoreTimestamp && Number(scoreTimestamp) > 0;
+  const maxLoan = maxLoanRaw ? Number(maxLoanRaw) / 1_000_000 : null;
 
   async function handleApply() {
     if (!amount || !address) return;
@@ -51,7 +67,7 @@ function ApplyLoan() {
         {
           onError: (error) => {
             if (error.message.includes("no score computed")) {
-              setErrorMsg("Please compute your credit score first.");
+              setErrorMsg("Please compute your credit score first (My Account page).");
             } else if (error.message.includes("existing active loan")) {
               setErrorMsg("You already have an active loan.");
             } else if (error.message.includes("no bank account")) {
@@ -68,6 +84,8 @@ function ApplyLoan() {
   }
 
   const busy = isPending || isConfirming || isEncrypting;
+  const amountNum = parseFloat(amount);
+  const overLimit = maxLoan !== null && amountNum > maxLoan;
 
   return (
     <div className="page">
@@ -100,6 +118,22 @@ function ApplyLoan() {
             >
               {status.text}
             </span>
+            {maxLoan !== null && (
+              <>
+                <span style={{ color: "#1e2d4a", margin: "0 4px" }}>|</span>
+                <span style={{ color: "#64748b", fontSize: "13px" }}>Max Loan:</span>
+                <span
+                  style={{
+                    color: "#3b82f6",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  ${maxLoan.toLocaleString()} USDC
+                </span>
+              </>
+            )}
           </div>
         )}
 
@@ -116,8 +150,15 @@ function ApplyLoan() {
           }}
         >
           💡 Your credit score is evaluated on-chain using FHE. Neither the lender nor anyone else can see your actual
-          score — only whether you qualify.
+          score — only whether you qualify. If your request exceeds the limit or you're not eligible, 0 will be
+          approved.
         </div>
+
+        {!hasScore && isConnected && (
+          <p className="warning" style={{ marginBottom: "16px" }}>
+            No credit score found. Go to <strong>My Account</strong> and compute your score first.
+          </p>
+        )}
 
         {hasActiveLoan && (
           <p className="warning" style={{ marginBottom: "16px" }}>
@@ -125,7 +166,7 @@ function ApplyLoan() {
           </p>
         )}
 
-        <label className="label">Loan Amount</label>
+        <label className="label">Loan Amount (USDC)</label>
         <input
           type="number"
           value={amount}
@@ -133,6 +174,14 @@ function ApplyLoan() {
           placeholder="0.00"
           disabled={hasActiveLoan}
         />
+
+        {overLimit && (
+          <p style={{ color: "#f59e0b", fontSize: "13px", marginTop: "6px" }}>
+            ⚠️ Amount exceeds the max loan limit (${maxLoan?.toLocaleString()} USDC). Your application will be approved
+            for $0.
+          </p>
+        )}
+
         <button onClick={handleApply} disabled={!isConnected || busy || !amount || hasActiveLoan}>
           {isEncrypting
             ? "Encrypting..."
@@ -142,7 +191,8 @@ function ApplyLoan() {
                 ? "Confirming..."
                 : "Apply for Loan"}
         </button>
-        {isSuccess && <p className="success">✓ Loan application submitted!</p>}
+
+        {isSuccess && <p className="success">✓ Loan application submitted! Check your balance on My Account.</p>}
         {isError && <p className="error">✗ {errorMsg || "Application failed. Please try again."}</p>}
       </div>
     </div>

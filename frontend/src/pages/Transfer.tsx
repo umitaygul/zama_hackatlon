@@ -65,6 +65,9 @@ function Transfer() {
         </button>
         {isSuccess && <p className="success">✓ Transfer successful!</p>}
         {isError && <p className="error">✗ {errorMsg || "Transfer failed. Please try again."}</p>}
+        <p style={{ color: "#64748b", fontSize: "12px", marginTop: "16px", lineHeight: "1.6" }}>
+          ⚠ Due to the nature of FHE (Fully Homomorphic Encryption), if your balance is insufficient, the transaction will still succeed but no funds will be transferred. Please verify your balance on the Credit Score page.
+        </p>
       </div>
     </div>
   );

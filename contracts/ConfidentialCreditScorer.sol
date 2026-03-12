@@ -6,9 +6,15 @@ import {FHE, euint64, ebool} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {IConfidentialBank} from "./interfaces/IConfidentialBank.sol";
 
+/**
+ * @title ConfidentialCreditScorer
+ * @notice Müşteri finansal verisinden şifreli kredi skoru hesaplar.
+ *         getEligibility() anlık threshold ile fresh ebool döndürür.
+ *         getMyScore() score + eligible + balance döndürür — tek kontrat, tek imza.
+ */
 contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
 
-    // ─── Scoring Parameters (adjustable by owner) ─────────────────────────────
+    // ─── Scoring Parameters (mutable by owner) ────────────────────────────────
 
     uint64 public balanceThresholdHigh  = 10_000e6;
     uint64 public balanceThresholdMed   =  5_000e6;
@@ -17,15 +23,17 @@ contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
     uint64 public monthsThresholdHigh   = 24;
     uint64 public monthsThresholdMed    = 12;
     uint64 public eligibilityThreshold  = 50;
+    uint64 public maxLoanAmount         = 50_000e6;
 
     // ─── State ────────────────────────────────────────────────────────────────
 
     IConfidentialBank public bank;
-    address           public lendingContract;
+    address public lendingContract;
 
     struct CreditScore {
         euint64 score;
         ebool   isEligible;
+        euint64 balance;
         uint256 computedAt;
     }
 
@@ -35,20 +43,12 @@ contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
 
     event ScoreComputed(address indexed customer, uint256 timestamp);
     event LendingContractSet(address indexed lending);
-    event ScoringParametersUpdated(
-        uint64 balanceHigh,
-        uint64 balanceMed,
-        uint64 depositHigh,
-        uint64 depositMed,
-        uint64 monthsHigh,
-        uint64 monthsMed,
-        uint64 eligibility
-    );
+    event ScoringParametersUpdated();
 
     // ─── Modifiers ────────────────────────────────────────────────────────────
 
     modifier onlyLending() {
-        require(msg.sender == lendingContract, "Scorer: caller is not lending contract");
+        require(msg.sender == lendingContract, "Scorer: caller is not lending");
         _;
     }
 
@@ -66,36 +66,27 @@ contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
     }
 
     function setScoringParameters(
-        uint64 balanceHigh,
-        uint64 balanceMed,
-        uint64 depositHigh,
-        uint64 depositMed,
+        uint64 balHigh,
+        uint64 balMed,
+        uint64 depHigh,
+        uint64 depMed,
         uint64 monthsHigh,
         uint64 monthsMed,
-        uint64 eligibility
+        uint64 eligibility,
+        uint64 maxLoan
     ) external onlyOwner {
-        require(balanceMed < balanceHigh, "Scorer: invalid balance thresholds");
-        require(depositMed < depositHigh, "Scorer: invalid deposit thresholds");
-        require(monthsMed < monthsHigh,   "Scorer: invalid months thresholds");
-        require(eligibility <= 100,        "Scorer: eligibility max 100");
-
-        balanceThresholdHigh = balanceHigh;
-        balanceThresholdMed  = balanceMed;
-        depositThresholdHigh = depositHigh;
-        depositThresholdMed  = depositMed;
+        balanceThresholdHigh = balHigh;
+        balanceThresholdMed  = balMed;
+        depositThresholdHigh = depHigh;
+        depositThresholdMed  = depMed;
         monthsThresholdHigh  = monthsHigh;
         monthsThresholdMed   = monthsMed;
         eligibilityThreshold = eligibility;
-
-        emit ScoringParametersUpdated(
-            balanceHigh, balanceMed,
-            depositHigh, depositMed,
-            monthsHigh, monthsMed,
-            eligibility
-        );
+        maxLoanAmount        = maxLoan;
+        emit ScoringParametersUpdated();
     }
 
-    // ─── Score Computation ────────────────────────────────────────────────────
+    // ─── Skor Hesaplama ───────────────────────────────────────────────────────
 
     function computeScore(address customer) external {
         (
@@ -104,50 +95,53 @@ contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
             euint64 monthsActive
         ) = bank.getFinancialData(customer);
 
-        // Balance Score (0 – 40 pts)
-        ebool balHigh = FHE.ge(balance, FHE.asEuint64(balanceThresholdHigh));
-        ebool balMed  = FHE.ge(balance, FHE.asEuint64(balanceThresholdMed));
-
+        // ── Bakiye Skoru (max 40 puan) ─────────────────────────────────────
+        ebool balHigh_ = FHE.ge(balance, FHE.asEuint64(balanceThresholdHigh));
+        ebool balMed_  = FHE.ge(balance, FHE.asEuint64(balanceThresholdMed));
         euint64 balanceScore = FHE.select(
-            balHigh,
+            balHigh_,
             FHE.asEuint64(40),
-            FHE.select(balMed, FHE.asEuint64(20), FHE.asEuint64(5))
+            FHE.select(balMed_, FHE.asEuint64(20), FHE.asEuint64(5))
         );
 
-        // Tenure Score (0 – 30 pts)
+        // ── Hesap Yaşı Skoru (max 30 puan) ────────────────────────────────
         ebool monthsHigh_ = FHE.ge(monthsActive, FHE.asEuint64(monthsThresholdHigh));
         ebool monthsMed_  = FHE.ge(monthsActive, FHE.asEuint64(monthsThresholdMed));
-
         euint64 tenureScore = FHE.select(
             monthsHigh_,
             FHE.asEuint64(30),
             FHE.select(monthsMed_, FHE.asEuint64(15), FHE.asEuint64(3))
         );
 
-        // Deposit Volume Score (0 – 30 pts)
-        ebool depHigh = FHE.ge(totalDeposited, FHE.asEuint64(depositThresholdHigh));
-        ebool depMed  = FHE.ge(totalDeposited, FHE.asEuint64(depositThresholdMed));
-
+        // ── Toplam Yatırım Skoru (max 30 puan) ────────────────────────────
+        ebool depHigh_ = FHE.ge(totalDeposited, FHE.asEuint64(depositThresholdHigh));
+        ebool depMed_  = FHE.ge(totalDeposited, FHE.asEuint64(depositThresholdMed));
         euint64 depositScore = FHE.select(
-            depHigh,
+            depHigh_,
             FHE.asEuint64(30),
-            FHE.select(depMed, FHE.asEuint64(15), FHE.asEuint64(3))
+            FHE.select(depMed_, FHE.asEuint64(15), FHE.asEuint64(3))
         );
 
-        // Total Score & Eligibility
+        // ── Toplam Skor ve Uygunluk ────────────────────────────────────────
         euint64 totalScore = FHE.add(FHE.add(balanceScore, tenureScore), depositScore);
-        ebool   eligible   = FHE.ge(totalScore, FHE.asEuint64(eligibilityThreshold));
+        ebool eligible     = FHE.ge(totalScore, FHE.asEuint64(eligibilityThreshold));
 
         _scores[customer] = CreditScore({
             score:      totalScore,
             isEligible: eligible,
+            balance:    balance,
             computedAt: block.timestamp
         });
 
+        // ── ACL İzinleri ───────────────────────────────────────────────────
         FHE.allowThis(totalScore);
         FHE.allowThis(eligible);
+        FHE.allowThis(balance);
+
         FHE.allow(totalScore, customer);
-        FHE.allow(eligible,   customer);
+        FHE.allow(eligible, customer);
+        FHE.allow(balance, customer);
+
         if (lendingContract != address(0)) {
             FHE.allow(eligible, lendingContract);
         }
@@ -155,31 +149,54 @@ contract ConfidentialCreditScorer is ZamaEthereumConfig, Ownable2Step {
         emit ScoreComputed(customer, block.timestamp);
     }
 
-    // ─── Lending Contract Access ──────────────────────────────────────────────
+    // ─── Lending Erişimi ──────────────────────────────────────────────────────
 
+    /**
+     * @notice Stored score handle'ından anlık eligibilityThreshold ile
+     *         fresh ebool hesaplar — cached isEligible kullanmaz.
+     *         Threshold değişse bile her çağrıda doğru sonuç döner.
+     */
     function getEligibility(address customer)
         external
         onlyLending
         returns (ebool)
     {
-        require(_scores[customer].computedAt > 0, "Scorer: no score computed yet");
-        FHE.allow(_scores[customer].isEligible, lendingContract);
-        return _scores[customer].isEligible;
+        require(_scores[customer].computedAt > 0, "Scorer: no score computed");
+
+        ebool freshEligible = FHE.ge(
+            _scores[customer].score,
+            FHE.asEuint64(eligibilityThreshold)
+        );
+
+        FHE.allowThis(freshEligible);
+        FHE.allow(freshEligible, lendingContract);
+
+        return freshEligible;
     }
 
-    // ─── Customer Access ──────────────────────────────────────────────────────
+    function getMaxLoanAmount() external view returns (uint64) {
+        return maxLoanAmount;
+    }
+
+    // ─── Müşteri Erişimi ──────────────────────────────────────────────────────
 
     function getMyScore(address customer)
         external
-        view
-        returns (euint64 score, ebool eligible, uint256 computedAt)
+        returns (euint64 score, ebool eligible, euint64 balance, uint256 computedAt)
     {
         require(
             msg.sender == customer || msg.sender == owner(),
             "Scorer: unauthorized"
         );
+        require(_scores[customer].computedAt > 0, "Scorer: no score computed");
+
         CreditScore storage cs = _scores[customer];
-        return (cs.score, cs.isEligible, cs.computedAt);
+
+        FHE.allow(cs.score, customer);
+        FHE.allow(cs.isEligible, customer);
+        FHE.allow(cs.balance, customer);
+
+        return (cs.score, cs.isEligible, cs.balance, cs.computedAt);
     }
 
     function getScoreTimestamp(address customer) external view returns (uint256) {

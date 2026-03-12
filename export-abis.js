@@ -10,5 +10,5 @@ const output = {
   ConfidentialLending: lending.abi
 };
 
-fs.writeFileSync('../confidential-bank-frontend/src/config/abis.json', JSON.stringify(output, null, 2));
+fs.writeFileSync('./frontend/src/config/abis.json', JSON.stringify(output, null, 2));
 console.log('ABIs exported successfully');

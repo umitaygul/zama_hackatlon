@@ -12,9 +12,8 @@ function OpenAccount() {
     isLoading: isConfirming,
     isSuccess,
     isError,
-  } = useWaitForTransactionReceipt({
-    hash,
-  });
+    error: txError,
+  } = useWaitForTransactionReceipt({ hash });
 
   function handleOpenAccount() {
     setErrorMsg("");
@@ -26,15 +25,26 @@ function OpenAccount() {
       },
       {
         onError: (error) => {
-          if (error.message.includes("account already exists")) {
-            setErrorMsg("You already have an account.");
+          console.log('openAccount onError:', error)
+          const msg = (error.message || "").toLowerCase()
+          if (msg.includes("already") || msg.includes("exists")) {
+            setErrorMsg("You already have an account.")
           } else {
-            setErrorMsg("Transaction failed. You may already have an account.");
+            setErrorMsg("Transaction failed. Please try again.")
           }
         },
       },
     );
   }
+
+  const getErrorMessage = () => {
+    if (errorMsg) return errorMsg;
+    const msg = (txError?.message || "").toLowerCase();
+    if (msg.includes("already") || msg.includes("exists")) {
+      return "You already have an account.";
+    }
+    return "Transaction failed. Please try again.";
+  };
 
   const busy = isPending || isConfirming;
 
@@ -45,14 +55,13 @@ function OpenAccount() {
       <div className="card">
         {!isConnected && <p className="warning">Please connect your wallet first.</p>}
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "24px", lineHeight: "1.6" }}>
-          Your account is protected by Fully Homomorphic Encryption. Balances and transactions remain private at all
-          times.
+          Your account is protected by Fully Homomorphic Encryption. Balances and transactions remain private at all times.
         </p>
         <button onClick={handleOpenAccount} disabled={!isConnected || busy}>
           {isPending ? "Waiting for signature..." : isConfirming ? "Confirming..." : "Open Account"}
         </button>
         {isSuccess && <p className="success">✓ Account opened successfully!</p>}
-        {isError && <p className="error">✗ {errorMsg || "Transaction failed. Please try again."}</p>}
+        {isError && <p className="error">✗ {getErrorMessage()}</p>}
       </div>
     </div>
   );

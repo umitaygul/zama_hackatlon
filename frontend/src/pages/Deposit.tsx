@@ -31,10 +31,7 @@ function Deposit() {
           args: [encrypted.handle, encrypted.inputProof],
         },
         {
-          onError: (err) => {
-            console.log('writeContract error', err)
-            setErrorMsg("Deposit failed. Make sure you have an account.")
-          },
+          onError: () => setErrorMsg("Deposit failed. Make sure you have an account."),
         },
       );
     } finally {
@@ -60,10 +57,7 @@ function Deposit() {
           args: [encrypted.handle, encrypted.inputProof],
         },
         {
-          onError: (err) => {
-            console.log('writeContract error', err)
-            setErrorMsg("Withdrawal failed. Make sure you have sufficient balance.")
-          },
+          onError: () => setErrorMsg("Withdrawal failed. Make sure you have an account."),
         },
       );
     } finally {
@@ -91,6 +85,9 @@ function Deposit() {
         </div>
         {isSuccess && <p className="success">✓ Transaction successful!</p>}
         {isError && <p className="error">✗ {errorMsg || "Transaction failed. Please try again."}</p>}
+        <p style={{ color: "#64748b", fontSize: "12px", marginTop: "16px", lineHeight: "1.6" }}>
+          ⚠ Due to the nature of FHE (Fully Homomorphic Encryption), if your balance is insufficient during a withdrawal, the transaction will still succeed but no funds will be withdrawn. Please verify your balance on the Credit Score page.
+        </p>
       </div>
     </div>
   );
