@@ -27,6 +27,7 @@ With Zama's fhEVM, computation runs directly on encrypted data. This project imp
 - **Loan amounts** are encrypted — the bank's portfolio is an aggregate of ciphertexts
 - **Scoring parameters** are adjustable by the contract owner — the bank can tighten or loosen credit policy based on economic conditions, without exposing any customer data
 - **Fresh score on every loan application** — `applyForLoan` internally calls `computeScore` to ensure the latest balance is always reflected; a user cannot game the system by withdrawing funds after scoring
+- **Balance read directly from bank** — balance is never routed through the scorer's snapshot, ensuring it always reflects the latest on-chain state
 
 ---
 
@@ -40,8 +41,8 @@ Customer
    ├─ transfer(to, encryptedAmount)           ▼
    │                                  ConfidentialBank.sol
    │                                         │
-   └─ applyForLoan(encryptedAmount) ─────────►  ConfidentialLending.sol
-                                             │   (internally calls computeScore first)
+   └─ applyForLoan(encryptedAmount) ─────────► ConfidentialLending.sol
+                                             │  (internally calls computeScore first)
                                              │
                                              ▼
                                   ConfidentialCreditScorer.sol
@@ -81,10 +82,11 @@ Core banking contract. All sensitive values stored as `euint64` ciphertexts.
 | Function | Description |
 |----------|-------------|
 | `openAccount()` | Opens an account with an encrypted zero balance |
-| `deposit(encryptedAmount, proof)` | Adds to balance; updates cumulative deposit tracker |
-| `withdraw(encryptedAmount, proof)` | Uses `FHE.select` to avoid balance-revealing reverts |
-| `transfer(to, encryptedAmount, proof)` | Peer-to-peer encrypted transfer |
+| `deposit(encryptedAmount, proof)` | Adds to balance; updates cumulative deposit tracker. Sets ACL for scorer immediately |
+| `withdraw(encryptedAmount, proof)` | Uses `FHE.select` to avoid balance-revealing reverts. Sets ACL for scorer immediately |
+| `transfer(to, encryptedAmount, proof)` | Peer-to-peer encrypted transfer. Sets ACL for both sender and recipient |
 | `getFinancialData(customer)` | Returns encrypted data — CreditScorer access only |
+| `getMyBalance()` | Returns encrypted balance handle — view function, no tx needed |
 | `incrementMonthsActive(customer)` | Monthly tick; automatable via Chainlink Automation |
 | `creditDeposit(customer, amount)` | Lending contract calls this to add approved loan to balance |
 | `debitBalance(customer, amount)` | Lending contract calls this on repayment |
@@ -103,8 +105,8 @@ Scores customers using three independent FHE sub-computations (100 points total)
 
 - `getEligibility()` does **not** return the cached `isEligible` stored at compute time. Instead, it re-evaluates `score >= eligibilityThreshold` using the **current live threshold**. This means if an admin raises the threshold, existing scores immediately reflect the new policy — no re-computation needed.
 - `computeScore()` is called internally by `applyForLoan` — the score is always fresh at loan application time.
-
-**Dynamic Scoring Policy:** The contract owner can call `setScoringParameters()` to adjust all thresholds and the eligibility cutoff at any time. Changes take effect on the next loan application. No customer data is ever exposed in this process.
+- `getMyScore()` is a **view function** — no wallet transaction needed, no gas cost. ACL permissions are set during `computeScore`.
+- Balance is **not stored** in the scorer — it is read directly from the bank contract on the frontend, bypassing any stale snapshot issues caused by Zama's asynchronous coprocessor model.
 
 ### ConfidentialLending.sol
 
@@ -167,11 +169,35 @@ function applyForLoan(bytes32 encryptedAmount, bytes calldata inputProof) extern
 }
 ```
 
+### Balance Read Directly from Bank
+
+Zama's fhEVM uses a coprocessor model — FHE operations are executed symbolically on-chain and processed asynchronously by a coprocessor network. This means a ciphertext handle produced in one transaction may not be immediately available for decryption in the next.
+
+To avoid stale balance reads, the frontend reads the balance handle directly from `bank.getMyBalance()` rather than from the scorer's stored snapshot. This ensures the decrypted balance always reflects the latest on-chain state:
+
+```
+❌ Old: balance → computeScore → scorer snapshot → decrypt (stale)
+✅ New: balance → bank.getMyBalance() → decrypt (always fresh)
+```
+
+### Minimal Wallet Signatures
+
+The frontend is designed to minimize wallet interactions:
+
+| Action | Signatures Required |
+|--------|-------------------|
+| Refresh Account Data | 1 tx (computeScore) + 1 decrypt (score + balance, two contracts, single EIP-712 signature) |
+| Deposit / Withdraw | 1 tx |
+| Transfer | 1 tx |
+| Apply for Loan | 1 tx (includes computeScore internally) |
+| Repay Loan | 1 tx |
+
 ### Access Control via FHE.allow
 
 - `CreditScorer` can compute on Bank ciphertext handles but cannot decrypt them
 - `LendingContract` receives only the `ebool` eligibility flag — never the score
 - Each customer can decrypt only their own data
+- ACL permissions for deposit/withdraw/transfer are set in the same transaction as the balance change — no separate ACL transaction needed
 
 ---
 
@@ -185,11 +211,11 @@ A React + Vite frontend connects to the deployed Sepolia contracts and encrypts 
 |------|-------------|
 | Open Account | Create a new confidential bank account |
 | Deposit / Withdraw | Encrypt and submit amounts via FHE relayer |
-| Transfer | Send funds privately to another address |
-| My Account | View your encrypted score and balance — decrypts with wallet signature. Loan Eligibility updates instantly when admin changes the threshold (no re-decrypt needed) |
-| Apply for Loan | Submit an encrypted loan application |
+| Transfer | Send funds privately. Proper error handling for invalid recipients |
+| My Account | View your encrypted score and balance with only 2 wallet interactions. Loan Eligibility updates instantly when admin changes the threshold |
+| Apply for Loan | Submit an encrypted loan application — amount never visible on-chain |
 | Repay Loan | Repay active loan — reveal encrypted amount before repaying |
-| Scoring Policy | Admin panel to adjust scoring parameters (owner only) — waits for full on-chain confirmation before showing success |
+| Scoring Policy | Admin panel — waits for full on-chain confirmation before showing success |
 
 ### Run Locally
 
@@ -220,25 +246,10 @@ cd zama_hackatlon
 ### 2. Install Dependencies
 
 ```bash
-npm install
-npm install @openzeppelin/contracts --legacy-peer-deps
-npm install @openzeppelin/confidential-contracts --legacy-peer-deps
+npm install --legacy-peer-deps
 ```
 
-### 3. Enable viaIR in hardhat.config.ts
-
-```typescript
-solidity: {
-  version: "0.8.27",
-  settings: {
-    optimizer: { enabled: true, runs: 800 },
-    evmVersion: "cancun",
-    viaIR: true,
-  },
-},
-```
-
-### 4. Compile & Test
+### 3. Compile & Test
 
 ```bash
 npx hardhat compile
@@ -247,7 +258,7 @@ npx hardhat test
 
 Expected: **36 passing**
 
-### 5. Deploy to Sepolia
+### 4. Deploy to Sepolia
 
 ```bash
 npx hardhat vars set MNEMONIC
@@ -255,7 +266,7 @@ npx hardhat vars set ALCHEMY_API_KEY
 npx hardhat run scripts/deploy.ts --network sepolia
 ```
 
-### 6. Update Frontend ABIs & Addresses
+### 5. Update Frontend ABIs & Addresses
 
 After deploy, update ABIs automatically:
 
@@ -279,9 +290,9 @@ Then update `frontend/src/config/contracts.ts` with the new deployed addresses.
 
 | Contract | Address |
 |----------|---------|
-| ConfidentialBank | `0x499Fdb89C5D7E8130B6EA7A7a49AA8Aa8Df548CF` |
-| ConfidentialCreditScorer | `0xB733481A2cDEF0cbb78DCb35106970FAf1E8714B` |
-| ConfidentialLending | `0xfa669BBdC17b14f3bcC3752d3C6686d70a93Bcc5` |
+| ConfidentialBank | `0x977cb08Ec75B9bC55541bCC1c539C57BC9C2Db9a` |
+| ConfidentialCreditScorer | `0x347a466DE9D85176B12b5B307968A5ED5255EBA2` |
+| ConfidentialLending | `0x5ea871F969adB28856d9a093FD1949F0C4930f27` |
 
 ---
 
@@ -330,6 +341,8 @@ Then update `frontend/src/config/contracts.ts` with the new deployed addresses.
 - [x] Dynamic scoring policy via `setScoringParameters`
 - [x] Live threshold eligibility — policy changes take effect immediately
 - [x] Fresh score on every loan application — prevents balance manipulation
+- [x] Balance read directly from bank — bypasses coprocessor async delay
+- [x] Minimal wallet signatures — 2 interactions for full account refresh
 - [x] 36 passing tests covering all contracts
 - [x] Sepolia testnet deployment
 - [x] React frontend with wallet integration
