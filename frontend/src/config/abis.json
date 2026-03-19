@@ -755,17 +755,12 @@
           "type": "bytes32"
         },
         {
-          "internalType": "euint64",
-          "name": "balance",
-          "type": "bytes32"
-        },
-        {
           "internalType": "uint256",
           "name": "computedAt",
           "type": "uint256"
         }
       ],
-      "stateMutability": "nonpayable",
+      "stateMutability": "view",
       "type": "function"
     },
     {

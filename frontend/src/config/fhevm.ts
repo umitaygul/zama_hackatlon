@@ -36,27 +36,29 @@ type Signer = {
 };
 
 /**
- * Score + eligible + balance — hepsi tek kontrat (ConfidentialCreditScorer), tek imza.
- * getMyScore() fonksiyonu üç handle'ı da scorer contract'ından döndürüyor.
+ * Score + eligible + balance — tek imza.
+ * Score/eligible scorer'dan, balance bank'tan direkt.
+ * İki farklı kontrat ama Zama SDK tek imzayla destekliyor.
  */
-export async function decryptMyScore(
+export async function decryptScoreAndBalance(
   scoreHandle: `0x${string}`,
   eligibleHandle: `0x${string}`,
   balanceHandle: `0x${string}`,
   scorerContract: string,
+  bankContract: string,
   userAddress: string,
   signer: Signer,
 ) {
   const fhevm = await getFhevmInstance();
   const keypair = fhevm.generateKeypair();
 
-  // Üç handle da aynı kontrat — tek imza yeterli
   const handleContractPairs = [
-    { handle: scoreHandle, contractAddress: scorerContract },
+    { handle: scoreHandle,    contractAddress: scorerContract },
     { handle: eligibleHandle, contractAddress: scorerContract },
-    { handle: balanceHandle, contractAddress: scorerContract },
+    { handle: balanceHandle,  contractAddress: bankContract },
   ];
-  const contractAddresses = [scorerContract];
+
+  const contractAddresses = [scorerContract, bankContract];
   const startTimeStamp = Math.floor(Date.now() / 1000);
   const durationDays = 10;
 
@@ -80,14 +82,14 @@ export async function decryptMyScore(
   );
 
   return {
-    score: result[scoreHandle as keyof typeof result] as bigint,
+    score:   result[scoreHandle    as keyof typeof result] as bigint,
     eligible: result[eligibleHandle as keyof typeof result] as boolean,
-    balance: result[balanceHandle as keyof typeof result] as bigint,
+    balance: result[balanceHandle  as keyof typeof result] as bigint,
   };
 }
 
 /**
- * Loan miktarını decrypt eder — ConfidentialLending contract'ından.
+ * Loan miktarını decrypt eder — ConfidentialLending contract'tan.
  */
 export async function decryptLoanAmount(
   loanHandle: `0x${string}`,

@@ -11,8 +11,15 @@ function Transfer() {
   const { address, isConnected } = useAccount();
 
   const { writeContract, isPending, data: hash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess, isError, error: txError } = useWaitForTransactionReceipt({ hash });
 
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransactionReceipt({ hash });
+  function parseError(error: any): string {
+    const msg = (error?.message || error?.shortMessage || "").toLowerCase();
+    if (msg.includes("self-transfer")) return "You cannot transfer to yourself.";
+    if (msg.includes("recipient has no account")) return "Recipient does not have an account.";
+    if (msg.includes("no account")) return "You do not have a bank account.";
+    return "Transfer failed. Please try again.";
+  }
 
   async function handleTransfer() {
     if (!amount || !to || !address) return;
@@ -33,13 +40,7 @@ function Transfer() {
         },
         {
           onError: (error) => {
-            if (error.message.includes("self-transfer")) {
-              setErrorMsg("You cannot transfer to yourself.");
-            } else if (error.message.includes("recipient has no account")) {
-              setErrorMsg("Recipient does not have an account.");
-            } else {
-              setErrorMsg("Transfer failed. Please try again.");
-            }
+            setErrorMsg(parseError(error));
           },
         },
       );
@@ -49,6 +50,7 @@ function Transfer() {
   }
 
   const busy = isPending || isConfirming || isEncrypting;
+  const displayError = errorMsg || (isError ? parseError(txError) : "");
 
   return (
     <div className="page">
@@ -64,9 +66,9 @@ function Transfer() {
           {isEncrypting ? "Encrypting..." : isPending ? "Waiting..." : isConfirming ? "Confirming..." : "Transfer"}
         </button>
         {isSuccess && <p className="success">✓ Transfer successful!</p>}
-        {isError && <p className="error">✗ {errorMsg || "Transfer failed. Please try again."}</p>}
+        {displayError && <p className="error">✗ {displayError}</p>}
         <p style={{ color: "#64748b", fontSize: "12px", marginTop: "16px", lineHeight: "1.6" }}>
-          ⚠ Due to the nature of FHE (Fully Homomorphic Encryption), if your balance is insufficient, the transaction will still succeed but no funds will be transferred. Please verify your balance on the Credit Score page.
+          ⚠ Due to the nature of FHE, if your balance is insufficient, the transaction will still succeed but no funds will be transferred. Please verify your balance on the My Account page.
         </p>
       </div>
     </div>

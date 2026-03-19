@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWalletClient, useWaitForTransactionReceipt } from "wagmi";
 import { CONTRACT_ADDRESSES, CONTRACT_ABIS } from "../config/contracts";
-import { decryptMyScore } from "../config/fhevm";
+import { decryptScoreAndBalance } from "../config/fhevm";
 
 const STORAGE_KEY_PREFIX = "confbank_score_";
-const POLL_INTERVAL_MS = 2_000;
-const POLL_TIMEOUT_MS = 60_000;
+const POLL_INTERVAL_MS   = 2_000;
+const POLL_TIMEOUT_MS    = 60_000;
 
 function CreditScore() {
   const { address, isConnected } = useAccount();
@@ -13,18 +13,18 @@ function CreditScore() {
   const { data: walletClient } = useWalletClient();
 
   const stored = address ? JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + address) || "null") : null;
-  const [decryptedScore, setDecryptedScore] = useState<number | null>(stored?.score ?? null);
+  const [decryptedScore,   setDecryptedScore]   = useState<number | null>(stored?.score   ?? null);
   const [decryptedBalance, setDecryptedBalance] = useState<number | null>(stored?.balance ?? null);
-  const [isDecrypting, setIsDecrypting] = useState(false);
-  const [isPolling, setIsPolling] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [isDecrypting,     setIsDecrypting]     = useState(false);
+  const [isPolling,        setIsPolling]        = useState(false);
+  const [errorMsg,         setErrorMsg]         = useState("");
 
   useEffect(() => {
     if (!address) return;
     const saved = localStorage.getItem(STORAGE_KEY_PREFIX + address);
     if (saved) {
       const parsed = JSON.parse(saved);
-      setDecryptedScore(parsed.score ?? null);
+      setDecryptedScore(parsed.score     ?? null);
       setDecryptedBalance(parsed.balance ?? null);
     } else {
       setDecryptedScore(null);
@@ -42,7 +42,7 @@ function CreditScore() {
   });
   const eligibilityThreshold = eligibilityThresholdRaw ? Number(eligibilityThresholdRaw) : 50;
 
-  // Eligibility her zaman anlık threshold'dan hesaplanır — cache'e yazılmaz
+  // Eligibility anlık threshold'dan hesaplanır — cache'e yazılmaz
   const computedEligible = decryptedScore !== null ? decryptedScore >= eligibilityThreshold : null;
 
   const {
@@ -58,6 +58,7 @@ function CreditScore() {
     query: { enabled: !!address, staleTime: 0 },
   }) as { data: bigint | undefined; isLoading: boolean; refetch: () => Promise<any> };
 
+  // getMyScore artık view — useReadContract ile çağrılıyor, wallet tx yok
   const { data: scoreData, refetch: refetchScore } = useReadContract({
     address: CONTRACT_ADDRESSES.ConfidentialCreditScorer,
     abi: CONTRACT_ABIS.ConfidentialCreditScorer,
@@ -70,13 +71,21 @@ function CreditScore() {
     },
   }) as { data: any; refetch: () => Promise<any> };
 
-  const scoreHandle = scoreData?.[0] as `0x${string}` | undefined;
+  // Balance handle — bank'tan direkt, her zaman güncel
+  const { data: balanceHandle, refetch: refetchBalance } = useReadContract({
+    address: CONTRACT_ADDRESSES.ConfidentialBank,
+    abi: CONTRACT_ABIS.ConfidentialBank,
+    functionName: "getMyBalance",
+    account: address,
+    query: { enabled: !!address, staleTime: 0 },
+  }) as { data: `0x${string}` | undefined; refetch: () => Promise<any> };
+
+  const scoreHandle   = scoreData?.[0] as `0x${string}` | undefined;
   const eligibleHandle = scoreData?.[1] as `0x${string}` | undefined;
-  const balanceHandle = scoreData?.[2] as `0x${string}` | undefined;
 
   async function runDecrypt() {
     if (!address || !walletClient || !scoreHandle || !eligibleHandle || !balanceHandle) {
-      setErrorMsg("Score data not ready. Please wait a moment and try again.");
+      setErrorMsg("Data not ready. Please wait a moment and try again.");
       return;
     }
     setIsDecrypting(true);
@@ -93,21 +102,26 @@ function CreditScore() {
     };
 
     try {
-      const result = await decryptMyScore(
+      // Score + eligible + balance — tek imza
+      const result = await decryptScoreAndBalance(
         scoreHandle,
         eligibleHandle,
         balanceHandle,
         CONTRACT_ADDRESSES.ConfidentialCreditScorer,
+        CONTRACT_ADDRESSES.ConfidentialBank,
         address,
         signer,
       );
-      const score = Number(result.score);
-      const balance = Number(result.balance) / 1_000_000;
+
+      const score          = Number(result.score);
+      const balanceDecimal = Number(result.balance) / 1_000_000;
 
       setDecryptedScore(score);
-      setDecryptedBalance(balance);
-      // eligible cache'e yazılmıyor — anlık threshold'dan hesaplanıyor
-      localStorage.setItem(STORAGE_KEY_PREFIX + address, JSON.stringify({ score, balance }));
+      setDecryptedBalance(balanceDecimal);
+      localStorage.setItem(
+        STORAGE_KEY_PREFIX + address,
+        JSON.stringify({ score, balance: balanceDecimal })
+      );
     } catch (e) {
       console.error(e);
       setErrorMsg("Failed to decrypt. Please try again.");
@@ -145,6 +159,7 @@ function CreditScore() {
             if (freshTimestamp > prevTimestamp) {
               setIsPolling(false);
               await refetchScore();
+              await refetchBalance();
               await runDecrypt();
               return;
             }
@@ -211,20 +226,18 @@ function CreditScore() {
         )}
 
         {isPolling && (
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#f59e0b",
-              fontFamily: "JetBrains Mono, monospace",
-              background: "#1a2236",
-              padding: "12px 16px",
-              borderRadius: "8px",
-              marginBottom: "16px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
+          <div style={{
+            fontSize: "13px",
+            color: "#f59e0b",
+            fontFamily: "JetBrains Mono, monospace",
+            background: "#1a2236",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
             <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
             Waiting for chain to confirm new score...
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -232,55 +245,31 @@ function CreditScore() {
         )}
 
         {!isLoading && hasScore && decryptedScore === null && !busy && (
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#64748b",
-              fontFamily: "JetBrains Mono, monospace",
-              background: "#1a2236",
-              padding: "12px 16px",
-              borderRadius: "8px",
-              marginBottom: "16px",
-            }}
-          >
+          <div style={{
+            fontSize: "13px",
+            color: "#64748b",
+            fontFamily: "JetBrains Mono, monospace",
+            background: "#1a2236",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            marginBottom: "16px",
+          }}>
             🔒 Your data is encrypted on-chain. Press "Refresh Account Data" to reveal.
           </div>
         )}
 
         {!isLoading && decryptedScore !== null && (
           <div style={{ display: "flex", gap: "16px", marginBottom: "24px", flexWrap: "wrap" }}>
+
             {/* Credit Score */}
-            <div
-              style={{
-                flex: 1,
-                background: "#1a2236",
-                borderRadius: "12px",
-                padding: "24px",
-                textAlign: "center",
-                border: `1px solid ${scoreColor}33`,
-                minWidth: "140px",
-              }}
-            >
-              <div
-                style={{
-                  color: "#64748b",
-                  fontSize: "11px",
-                  letterSpacing: "2px",
-                  textTransform: "uppercase",
-                  marginBottom: "8px",
-                }}
-              >
+            <div style={{
+              flex: 1, background: "#1a2236", borderRadius: "12px", padding: "24px",
+              textAlign: "center", border: `1px solid ${scoreColor}33`, minWidth: "140px",
+            }}>
+              <div style={{ color: "#64748b", fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "8px" }}>
                 Credit Score
               </div>
-              <div
-                style={{
-                  fontSize: "56px",
-                  fontWeight: 700,
-                  color: scoreColor,
-                  fontFamily: "JetBrains Mono, monospace",
-                  lineHeight: 1,
-                }}
-              >
+              <div style={{ fontSize: "56px", fontWeight: 700, color: scoreColor, fontFamily: "JetBrains Mono, monospace", lineHeight: 1 }}>
                 {decryptedScore}
               </div>
               <div style={{ fontSize: "12px", color: "#64748b", marginTop: "6px" }}>out of 100</div>
@@ -289,87 +278,35 @@ function CreditScore() {
               </div>
             </div>
 
-            {/* Balance */}
+            {/* Balance — bank'tan direkt */}
             {decryptedBalance !== null && (
-              <div
-                style={{
-                  flex: 1,
-                  background: "#1a2236",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  textAlign: "center",
-                  border: "1px solid #3b82f633",
-                  minWidth: "140px",
-                }}
-              >
-                <div
-                  style={{
-                    color: "#64748b",
-                    fontSize: "11px",
-                    letterSpacing: "2px",
-                    textTransform: "uppercase",
-                    marginBottom: "8px",
-                  }}
-                >
+              <div style={{
+                flex: 1, background: "#1a2236", borderRadius: "12px", padding: "24px",
+                textAlign: "center", border: "1px solid #3b82f633", minWidth: "140px",
+              }}>
+                <div style={{ color: "#64748b", fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "8px" }}>
                   Balance
                 </div>
-                <div
-                  style={{
-                    fontSize: "36px",
-                    fontWeight: 700,
-                    color: "#3b82f6",
-                    fontFamily: "JetBrains Mono, monospace",
-                    lineHeight: 1,
-                  }}
-                >
+                <div style={{ fontSize: "36px", fontWeight: 700, color: "#3b82f6", fontFamily: "JetBrains Mono, monospace", lineHeight: 1 }}>
                   ${decryptedBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: "12px", color: "#64748b", marginTop: "6px" }}>USDC</div>
               </div>
             )}
 
-            {/* Loan Eligibility — anlık threshold'dan hesaplanır */}
+            {/* Loan Eligibility */}
             {computedEligible !== null && (
-              <div
-                style={{
-                  flex: 1,
-                  background: "#1a2236",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  textAlign: "center",
-                  border: `1px solid ${computedEligible ? "#22c55e33" : "#ef444433"}`,
-                  minWidth: "140px",
-                }}
-              >
-                <div
-                  style={{
-                    color: "#64748b",
-                    fontSize: "11px",
-                    letterSpacing: "2px",
-                    textTransform: "uppercase",
-                    marginBottom: "8px",
-                  }}
-                >
+              <div style={{
+                flex: 1, background: "#1a2236", borderRadius: "12px", padding: "24px",
+                textAlign: "center", border: `1px solid ${computedEligible ? "#22c55e33" : "#ef444433"}`, minWidth: "140px",
+              }}>
+                <div style={{ color: "#64748b", fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "8px" }}>
                   Loan Eligibility
                 </div>
-                <div
-                  style={{
-                    fontSize: "36px",
-                    fontWeight: 700,
-                    color: computedEligible ? "#22c55e" : "#ef4444",
-                    lineHeight: 1,
-                  }}
-                >
+                <div style={{ fontSize: "36px", fontWeight: 700, color: computedEligible ? "#22c55e" : "#ef4444", lineHeight: 1 }}>
                   {computedEligible ? "✓" : "✗"}
                 </div>
-                <div
-                  style={{
-                    fontSize: "14px",
-                    color: computedEligible ? "#22c55e" : "#ef4444",
-                    marginTop: "10px",
-                    fontWeight: 600,
-                  }}
-                >
+                <div style={{ fontSize: "14px", color: computedEligible ? "#22c55e" : "#ef4444", marginTop: "10px", fontWeight: 600 }}>
                   {computedEligible ? "Eligible" : "Not Eligible"}
                 </div>
               </div>

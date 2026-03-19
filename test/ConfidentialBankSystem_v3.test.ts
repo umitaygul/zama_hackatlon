@@ -50,8 +50,6 @@ describe("ConfidentialBankSystem v3", function () {
   });
 
   // Eligible alice: 25,000 USDC → score = 40+15+3 = 58 >= 50 → eligible
-  // Not: applyForLoan artık içinde computeScore çağırıyor,
-  //      ama setupEligibleAlice'te manuel çağrı bırakıldı (zarar vermez)
   async function setupEligibleAlice() {
     await (await bank.connect(alice).openAccount()).wait();
     const enc = await encryptForBank(25_000_000_000n, alice);
@@ -177,6 +175,7 @@ describe("ConfidentialBankSystem v3", function () {
     it("balance=0 → score=11 (not eligible)", async function () {
       await (await scorer.connect(alice).computeScore(alice.address)).wait();
       const result = await scorer.connect(alice).getMyScore.staticCall(alice.address);
+      // result[0]=score, result[1]=eligible, result[2]=computedAt
       expect(await decryptU64(result[0], scorerAddress, alice)).to.equal(11n);
     });
 
@@ -189,12 +188,12 @@ describe("ConfidentialBankSystem v3", function () {
       expect(await decryptBool(result[1], scorerAddress, alice)).to.be.true;
     });
 
-    it("should return balance handle from scorer (single signature)", async function () {
+    it("should read balance directly from bank (not scorer)", async function () {
       const enc = await encryptForBank(5_000_000_000n, alice);
       await (await bank.connect(alice).deposit(enc.handles[0], enc.inputProof)).wait();
-      await (await scorer.connect(alice).computeScore(alice.address)).wait();
-      const result = await scorer.connect(alice).getMyScore.staticCall(alice.address);
-      expect(await decryptU64(result[2], scorerAddress, alice)).to.equal(5_000_000_000n);
+      // Balance artık bank'tan direkt okunuyor
+      const handle = await bank.connect(alice).getMyBalance();
+      expect(await decryptU64(handle, bankAddress, alice)).to.equal(5_000_000_000n);
     });
 
     it("should revert compute for non-account", async function () {
@@ -274,7 +273,7 @@ describe("ConfidentialBankSystem v3", function () {
   describe("Lending: ineligible", function () {
     it("should approve 0 when not eligible (low balance)", async function () {
       await (await bank.connect(alice).openAccount()).wait();
-      const enc = await encryptForBank(100_000_000n, alice); // 100 USDC → score < 50
+      const enc = await encryptForBank(100_000_000n, alice);
       await (await bank.connect(alice).deposit(enc.handles[0], enc.inputProof)).wait();
       const loanEnc = await encryptForLending(1_000_000_000n, alice);
       await (await lending.connect(alice).applyForLoan(loanEnc.handles[0], loanEnc.inputProof)).wait();
@@ -283,14 +282,13 @@ describe("ConfidentialBankSystem v3", function () {
     });
 
     it("should deny loan after threshold raised above existing score", async function () {
-      await setupEligibleAlice(); // score = 58, threshold = 50 → eligible
+      await setupEligibleAlice();
 
-      // Threshold'u 70'e çıkar — Alice'in score'u 58, artık eligible değil
       await (await scorer.connect(owner).setScoringParameters(
         10_000_000_000n, 5_000_000_000n,
         50_000_000_000n, 20_000_000_000n,
         24n, 12n,
-        70n, // ← yeni threshold
+        70n,
         50_000_000_000n
       )).wait();
 
@@ -303,15 +301,12 @@ describe("ConfidentialBankSystem v3", function () {
     it("should deny loan after withdraw drops score below threshold", async function () {
       await (await bank.connect(alice).openAccount()).wait();
 
-      // 25k yatır → score 58 → eligible olacak
       const enc1 = await encryptForBank(25_000_000_000n, alice);
       await (await bank.connect(alice).deposit(enc1.handles[0], enc1.inputProof)).wait();
 
-      // Tüm parayı çek — bakiye 0'a düşsün
       const enc2 = await encryptForBank(25_000_000_000n, alice);
       await (await bank.connect(alice).withdraw(enc2.handles[0], enc2.inputProof)).wait();
 
-      // applyForLoan içinde computeScore çağrılıyor — bakiye 0, score düşük → 0 onaylanır
       const enc3 = await encryptForLending(1_000_000_000n, alice);
       await (await lending.connect(alice).applyForLoan(enc3.handles[0], enc3.inputProof)).wait();
       const result = await lending.connect(alice).getMyLoan.staticCall(alice.address);
@@ -379,8 +374,6 @@ describe("ConfidentialBankSystem v3", function () {
       await expect(lending.connect(alice).applyForLoan(enc.handles[0], enc.inputProof))
         .to.be.revertedWith("Lending: no bank account");
     });
-    // Not: "should revert without computed score" testi kaldırıldı —
-    // applyForLoan artık içinde computeScore çağırıyor, bu revert oluşmuyor.
   });
 
   // ── INTEGRATION ───────────────────────────────────────────────────────────
