@@ -1,7 +1,9 @@
 # Confidential Bank & Credit Scoring
+
 **Zama Protocol Hackathon Submission**
 
-A privacy-preserving on-chain banking system powered by Fully Homomorphic Encryption (FHE). Customer balances, transfer amounts, and credit scores are never exposed as plaintext on-chain — yet the system operates correctly and verifiably.
+A privacy-preserving on-chain banking system powered by Fully Homomorphic Encryption (FHE). Customer balances, transfer
+amounts, and credit scores are never exposed as plaintext on-chain — yet the system operates correctly and verifiably.
 
 ---
 
@@ -23,11 +25,15 @@ With Zama's fhEVM, computation runs directly on encrypted data. This project imp
 
 - **Balances** are stored as `euint64` ciphertexts — never visible to anyone except the account holder
 - **Transfer amounts** are encrypted end-to-end — observers only see that a transfer occurred
-- **Credit scoring** runs entirely under FHE — the lender receives only an encrypted boolean (`ebool`) indicating eligibility, never the underlying financial data
+- **Credit scoring** runs entirely under FHE — the lender receives only an encrypted boolean (`ebool`) indicating
+  eligibility, never the underlying financial data
 - **Loan amounts** are encrypted — the bank's portfolio is an aggregate of ciphertexts
-- **Scoring parameters** are adjustable by the contract owner — the bank can tighten or loosen credit policy based on economic conditions, without exposing any customer data
-- **Fresh score on every loan application** — `applyForLoan` internally calls `computeScore` to ensure the latest balance is always reflected; a user cannot game the system by withdrawing funds after scoring
-- **Balance read directly from bank** — balance is never routed through the scorer's snapshot, ensuring it always reflects the latest on-chain state
+- **Scoring parameters** are adjustable by the contract owner — the bank can tighten or loosen credit policy based on
+  economic conditions, without exposing any customer data
+- **Fresh score on every loan application** — `applyForLoan` internally calls `computeScore` to ensure the latest
+  balance is always reflected; a user cannot game the system by withdrawing funds after scoring
+- **Balance read directly from bank** — balance is never routed through the scorer's snapshot, ensuring it always
+  reflects the latest on-chain state
 
 ---
 
@@ -63,13 +69,13 @@ Bank Admin (Owner)
 
 ## 🔒 Privacy Guarantees
 
-| Data | Bank Owner | Customer | Scorer | Lender | Public |
-|------|-----------|----------|--------|--------|--------|
-| Balance amount | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Transfer amount | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Credit score | ❌ | ✅ | ✅ | ❌ | ❌ |
-| Loan eligibility | ❌ | ✅ | ✅ | ✅ (ebool) | ❌ |
-| Loan amount | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Data             | Bank Owner | Customer | Scorer | Lender     | Public |
+| ---------------- | ---------- | -------- | ------ | ---------- | ------ |
+| Balance amount   | ❌         | ✅       | ❌     | ❌         | ❌     |
+| Transfer amount  | ❌         | ✅       | ❌     | ❌         | ❌     |
+| Credit score     | ❌         | ✅       | ✅     | ❌         | ❌     |
+| Loan eligibility | ❌         | ✅       | ✅     | ✅ (ebool) | ❌     |
+| Loan amount      | ❌         | ✅       | ❌     | ✅         | ❌     |
 
 ---
 
@@ -79,45 +85,49 @@ Bank Admin (Owner)
 
 Core banking contract. All sensitive values stored as `euint64` ciphertexts.
 
-| Function | Description |
-|----------|-------------|
-| `openAccount()` | Opens an account with an encrypted zero balance |
-| `deposit(encryptedAmount, proof)` | Adds to balance; updates cumulative deposit tracker. Sets ACL for scorer immediately |
-| `withdraw(encryptedAmount, proof)` | Uses `FHE.select` to avoid balance-revealing reverts. Sets ACL for scorer immediately |
-| `transfer(to, encryptedAmount, proof)` | Peer-to-peer encrypted transfer. Sets ACL for both sender and recipient |
-| `getFinancialData(customer)` | Returns encrypted data — CreditScorer access only |
-| `getMyBalance()` | Returns encrypted balance handle — view function, no tx needed |
-| `incrementMonthsActive(customer)` | Monthly tick; automatable via Chainlink Automation |
-| `creditDeposit(customer, amount)` | Lending contract calls this to add approved loan to balance |
-| `debitBalance(customer, amount)` | Lending contract calls this on repayment |
+| Function                               | Description                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
+| `openAccount()`                        | Opens an account with an encrypted zero balance                                       |
+| `deposit(encryptedAmount, proof)`      | Adds to balance; updates cumulative deposit tracker. Sets ACL for scorer immediately  |
+| `withdraw(encryptedAmount, proof)`     | Uses `FHE.select` to avoid balance-revealing reverts. Sets ACL for scorer immediately |
+| `transfer(to, encryptedAmount, proof)` | Peer-to-peer encrypted transfer. Sets ACL for both sender and recipient               |
+| `getFinancialData(customer)`           | Returns encrypted data — CreditScorer access only                                     |
+| `getMyBalance()`                       | Returns encrypted balance handle — view function, no tx needed                        |
+| `incrementMonthsActive(customer)`      | Monthly tick; automatable via Chainlink Automation                                    |
+| `creditDeposit(customer, amount)`      | Lending contract calls this to add approved loan to balance                           |
+| `debitBalance(customer, amount)`       | Lending contract calls this on repayment                                              |
 
 ### ConfidentialCreditScorer.sol
 
 Scores customers using three independent FHE sub-computations (100 points total):
 
-| Criterion | Max Points | Default Thresholds |
-|-----------|-----------|-------------------|
-| Current balance | 40 pts | High: $10k / Med: $5k |
-| Account tenure | 30 pts | High: 24mo / Med: 12mo |
-| Total deposit volume | 30 pts | High: $50k / Med: $20k |
+| Criterion            | Max Points | Default Thresholds     |
+| -------------------- | ---------- | ---------------------- |
+| Current balance      | 40 pts     | High: $10k / Med: $5k  |
+| Account tenure       | 30 pts     | High: 24mo / Med: 12mo |
+| Total deposit volume | 30 pts     | High: $50k / Med: $20k |
 
 **Key design decisions:**
 
-- `getEligibility()` does **not** return the cached `isEligible` stored at compute time. Instead, it re-evaluates `score >= eligibilityThreshold` using the **current live threshold**. This means if an admin raises the threshold, existing scores immediately reflect the new policy — no re-computation needed.
+- `getEligibility()` does **not** return the cached `isEligible` stored at compute time. Instead, it re-evaluates
+  `score >= eligibilityThreshold` using the **current live threshold**. This means if an admin raises the threshold,
+  existing scores immediately reflect the new policy — no re-computation needed.
 - `computeScore()` is called internally by `applyForLoan` — the score is always fresh at loan application time.
-- `getMyScore()` is a **view function** — no wallet transaction needed, no gas cost. ACL permissions are set during `computeScore`.
-- Balance is **not stored** in the scorer — it is read directly from the bank contract on the frontend, bypassing any stale snapshot issues caused by Zama's asynchronous coprocessor model.
+- `getMyScore()` is a **view function** — no wallet transaction needed, no gas cost. ACL permissions are set during
+  `computeScore`.
+- Balance is **not stored** in the scorer — it is read directly from the bank contract on the frontend, bypassing any
+  stale snapshot issues caused by Zama's asynchronous coprocessor model.
 
 ### ConfidentialLending.sol
 
 Handles loan issuance and repayment with fully encrypted amounts.
 
-| Function | Description |
-|----------|-------------|
+| Function                               | Description                                                                                              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `applyForLoan(encryptedAmount, proof)` | Calls `computeScore` first, then oblivious approval via `FHE.select(eligible && withinLimit, amount, 0)` |
-| `repay()` | Deducts the full encrypted loan amount from bank balance |
-| `markAsDefaulted(borrower)` | Owner marks overdue loans as defaulted |
-| `getTotalLoanVolume()` | Owner reads encrypted portfolio aggregate |
+| `repay()`                              | Deducts the full encrypted loan amount from bank balance                                                 |
+| `markAsDefaulted(borrower)`            | Owner marks overdue loans as defaulted                                                                   |
+| `getTotalLoanVolume()`                 | Owner reads encrypted portfolio aggregate                                                                |
 
 ---
 
@@ -125,7 +135,8 @@ Handles loan issuance and repayment with fully encrypted amounts.
 
 ### The Oblivious Conditional Pattern
 
-Standard Solidity `if/else` cannot be used with encrypted values because evaluating the condition requires decryption. fhEVM solves this with `FHE.select(cond, a, b)`:
+Standard Solidity `if/else` cannot be used with encrypted values because evaluating the condition requires decryption.
+fhEVM solves this with `FHE.select(cond, a, b)`:
 
 ```solidity
 // ❌ Cannot do this — requires decrypting balance
@@ -156,7 +167,8 @@ return freshEligible;
 
 ### Fresh Score on Loan Application
 
-`applyForLoan` calls `computeScore` internally before checking eligibility. This prevents a user from inflating their score with a large deposit, then withdrawing before the loan is processed:
+`applyForLoan` calls `computeScore` internally before checking eligibility. This prevents a user from inflating their
+score with a large deposit, then withdrawing before the loan is processed:
 
 ```solidity
 function applyForLoan(bytes32 encryptedAmount, bytes calldata inputProof) external {
@@ -171,9 +183,12 @@ function applyForLoan(bytes32 encryptedAmount, bytes calldata inputProof) extern
 
 ### Balance Read Directly from Bank
 
-Zama's fhEVM uses a coprocessor model — FHE operations are executed symbolically on-chain and processed asynchronously by a coprocessor network. This means a ciphertext handle produced in one transaction may not be immediately available for decryption in the next.
+Zama's fhEVM uses a coprocessor model — FHE operations are executed symbolically on-chain and processed asynchronously
+by a coprocessor network. This means a ciphertext handle produced in one transaction may not be immediately available
+for decryption in the next.
 
-To avoid stale balance reads, the frontend reads the balance handle directly from `bank.getMyBalance()` rather than from the scorer's stored snapshot. This ensures the decrypted balance always reflects the latest on-chain state:
+To avoid stale balance reads, the frontend reads the balance handle directly from `bank.getMyBalance()` rather than from
+the scorer's stored snapshot. This ensures the decrypted balance always reflects the latest on-chain state:
 
 ```
 ❌ Old: balance → computeScore → scorer snapshot → decrypt (stale)
@@ -184,38 +199,40 @@ To avoid stale balance reads, the frontend reads the balance handle directly fro
 
 The frontend is designed to minimize wallet interactions:
 
-| Action | Signatures Required |
-|--------|-------------------|
+| Action               | Signatures Required                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------ |
 | Refresh Account Data | 1 tx (computeScore) + 1 decrypt (score + balance, two contracts, single EIP-712 signature) |
-| Deposit / Withdraw | 1 tx |
-| Transfer | 1 tx |
-| Apply for Loan | 1 tx (includes computeScore internally) |
-| Repay Loan | 1 tx |
+| Deposit / Withdraw   | 1 tx                                                                                       |
+| Transfer             | 1 tx                                                                                       |
+| Apply for Loan       | 1 tx (includes computeScore internally)                                                    |
+| Repay Loan           | 1 tx                                                                                       |
 
 ### Access Control via FHE.allow
 
 - `CreditScorer` can compute on Bank ciphertext handles but cannot decrypt them
 - `LendingContract` receives only the `ebool` eligibility flag — never the score
 - Each customer can decrypt only their own data
-- ACL permissions for deposit/withdraw/transfer are set in the same transaction as the balance change — no separate ACL transaction needed
+- ACL permissions for deposit/withdraw/transfer are set in the same transaction as the balance change — no separate ACL
+  transaction needed
 
 ---
 
 ## 🖥️ Frontend
 
-A React + Vite frontend connects to the deployed Sepolia contracts and encrypts all inputs client-side using `@zama-fhe/relayer-sdk` before sending transactions.
+A React + Vite frontend connects to the deployed Sepolia contracts and encrypts all inputs client-side using
+`@zama-fhe/relayer-sdk` before sending transactions.
 
 ### Pages
 
-| Page | Description |
-|------|-------------|
-| Open Account | Create a new confidential bank account |
-| Deposit / Withdraw | Encrypt and submit amounts via FHE relayer |
-| Transfer | Send funds privately. Proper error handling for invalid recipients |
-| My Account | View your encrypted score and balance with only 2 wallet interactions. Loan Eligibility updates instantly when admin changes the threshold |
-| Apply for Loan | Submit an encrypted loan application — amount never visible on-chain |
-| Repay Loan | Repay active loan — reveal encrypted amount before repaying |
-| Scoring Policy | Admin panel — waits for full on-chain confirmation before showing success |
+| Page               | Description                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Open Account       | Create a new confidential bank account                                                                                                     |
+| Deposit / Withdraw | Encrypt and submit amounts via FHE relayer                                                                                                 |
+| Transfer           | Send funds privately. Proper error handling for invalid recipients                                                                         |
+| My Account         | View your encrypted score and balance with only 2 wallet interactions. Loan Eligibility updates instantly when admin changes the threshold |
+| Apply for Loan     | Submit an encrypted loan application — amount never visible on-chain                                                                       |
+| Repay Loan         | Repay active loan — reveal encrypted amount before repaying                                                                                |
+| Scoring Policy     | Admin panel — waits for full on-chain confirmation before showing success                                                                  |
 
 ### Run Locally
 
@@ -288,11 +305,11 @@ Then update `frontend/src/config/contracts.ts` with the new deployed addresses.
 
 ## 🌐 Deployed Contracts (Sepolia)
 
-| Contract | Address |
-|----------|---------|
-| ConfidentialBank | `0x977cb08Ec75B9bC55541bCC1c539C57BC9C2Db9a` |
-| ConfidentialCreditScorer | `0x347a466DE9D85176B12b5B307968A5ED5255EBA2` |
-| ConfidentialLending | `0x5ea871F969adB28856d9a093FD1949F0C4930f27` |
+| Contract                 | Address                                      |
+| ------------------------ | -------------------------------------------- |
+| ConfidentialBank         | `0x1b374Bee037D7d6F71a982bFEC92B3d2cf94f5f6` |
+| ConfidentialCreditScorer | `0x4bdeF785b269F17BF6eefc4a4f170cD6AD7d876f` |
+| ConfidentialLending      | `0xfd1C71Bd8759185cFaD10301be9A1fd1f2C02EDD` |
 
 ---
 
