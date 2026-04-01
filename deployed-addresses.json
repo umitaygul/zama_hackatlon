@@ -1,7 +1,7 @@
 {
-  "ConfidentialBank": "0x977cb08Ec75B9bC55541bCC1c539C57BC9C2Db9a",
-  "ConfidentialCreditScorer": "0x347a466DE9D85176B12b5B307968A5ED5255EBA2",
-  "ConfidentialLending": "0x5ea871F969adB28856d9a093FD1949F0C4930f27",
+  "ConfidentialBank": "0x1b374Bee037D7d6F71a982bFEC92B3d2cf94f5f6",
+  "ConfidentialCreditScorer": "0x4bdeF785b269F17BF6eefc4a4f170cD6AD7d876f",
+  "ConfidentialLending": "0xfd1C71Bd8759185cFaD10301be9A1fd1f2C02EDD",
   "deployer": "0x08c95aE409bDe827B530DD2c72d2d3387B301C13",
-  "deployedAt": "2026-03-14T12:31:48.562Z"
+  "deployedAt": "2026-04-01T06:02:35.725Z"
 }

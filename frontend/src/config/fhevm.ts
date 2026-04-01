@@ -7,7 +7,7 @@ export async function getFhevmInstance() {
   await initSDK();
   instance = await createInstance({
     ...SepoliaConfig,
-    network: "https://eth-sepolia.g.alchemy.com/v2/wvNpaBCMa40xt5csZFN3a",
+    network: "https://eth-sepolia.g.alchemy.com/v2/LAD4g3mhiiu8I3FKUnpsp",
     relayerUrl: "https://relayer.testnet.zama.org",
   });
   return instance;
@@ -53,9 +53,9 @@ export async function decryptScoreAndBalance(
   const keypair = fhevm.generateKeypair();
 
   const handleContractPairs = [
-    { handle: scoreHandle,    contractAddress: scorerContract },
+    { handle: scoreHandle, contractAddress: scorerContract },
     { handle: eligibleHandle, contractAddress: scorerContract },
-    { handle: balanceHandle,  contractAddress: bankContract },
+    { handle: balanceHandle, contractAddress: bankContract },
   ];
 
   const contractAddresses = [scorerContract, bankContract];
@@ -82,9 +82,9 @@ export async function decryptScoreAndBalance(
   );
 
   return {
-    score:   result[scoreHandle    as keyof typeof result] as bigint,
+    score: result[scoreHandle as keyof typeof result] as bigint,
     eligible: result[eligibleHandle as keyof typeof result] as boolean,
-    balance: result[balanceHandle  as keyof typeof result] as bigint,
+    balance: result[balanceHandle as keyof typeof result] as bigint,
   };
 }
 

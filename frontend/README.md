@@ -194,9 +194,9 @@ npx hardhat run scripts/deploy.ts --network sepolia
 
 | Contract | Address |
 |----------|---------|
-| ConfidentialBank | `0x3C4382e87E92dC3814D662B1A938958288Fe85C1` |
-| ConfidentialCreditScorer | `0xb51C5da0Fc124D32dF8b17068AC4b544A7Ea403c` |
-| ConfidentialLending | `0x8b1dD90432B891c9bfF7207d8c1AEc3DE493BAE1` |
+| ConfidentialBank | `0x1b374Bee037D7d6F71a982bFEC92B3d2cf94f5f6` |
+| ConfidentialCreditScorer | `0x4bdeF785b269F17BF6eefc4a4f170cD6AD7d876f` |
+| ConfidentialLending | `0xfd1C71Bd8759185cFaD10301be9A1fd1f2C02EDD` |
 
 ---
 
